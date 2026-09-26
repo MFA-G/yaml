@@ -1162,6 +1162,31 @@ c: cc\n`
     const doc = YAML.parseDocument(src)
     expect(String(doc)).toBe(src)
   })
+
+  describe('blank line after empty value with props in map in seq (#717)', () => {
+    for (const props of ['!!null', '&a', '&a !!null']) {
+      test(props, () => {
+        const src = `- x: ${props}\n\n- y\n`
+        const doc = YAML.parseDocument<YAML.YAMLSeq>(src)
+        expect(doc.errors).toHaveLength(0)
+        const [map, y] = doc.value as unknown as [YAML.YAMLMap, YAML.Scalar]
+        expect(map.get('x')).not.toHaveProperty('spaceBefore', true)
+        expect(y).toMatchObject({ value: 'y', spaceBefore: true })
+        expect(String(doc)).toBe(`- x: ${props} \n\n- y\n`)
+      })
+    }
+
+    test('map in map in map', () => {
+      const src = 'a:\n  b:\n    c: !!null\n\nd: 1\n'
+      const doc = YAML.parseDocument<YAML.YAMLMap>(src)
+      expect(doc.errors).toHaveLength(0)
+      expect(doc.value.getPair('d')?.key).toMatchObject({
+        value: 'd',
+        spaceBefore: true
+      })
+      expect(String(doc)).toBe('a:\n  b:\n    c: !!null \n\nd: 1\n')
+    })
+  })
 })
 
 describe('collection end comments', () => {

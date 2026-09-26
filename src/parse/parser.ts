@@ -94,6 +94,25 @@ function getFirstKeyStartProps(prev: SourceToken[]) {
   return prev.splice(i, prev.length)
 }
 
+/**
+ * For an empty map value with an anchor or tag, split off the blank lines
+ * that follow the end of its line.
+ *
+ * Note: May modify input array
+ */
+function splitBlankLinesAfterProps(sep: SourceToken[]) {
+  let i = sep.length
+  while (--i >= 0) {
+    const { type } = sep[i]
+    if (type === 'anchor' || type === 'tag') break
+    if (type !== 'newline' && type !== 'space') return []
+  }
+  if (i < 0) return []
+  const nl: number[] = []
+  while (++i < sep.length) if (sep[i].type === 'newline') nl.push(i)
+  return nl.length >= 2 ? sep.splice(nl[1]) : []
+}
+
 function fixFlowSeqItems(fc: FlowCollection) {
   if (fc.start.type === 'flow-seq-start') {
     for (const it of fc.items) {
@@ -390,6 +409,16 @@ export class Parser {
           if (top.type === 'document') top.end = last.start
           else top.items.push({ start: last.start })
           token.items.splice(-1, 1)
+        } else if (
+          top.type !== 'document' &&
+          token.type === 'block-map' &&
+          last?.sep &&
+          !last.value
+        ) {
+          // For an empty last value with props, as in `- x: !!null\n\n- y`,
+          // blank lines after its line belong to the parent's next item.
+          const start = splitBlankLinesAfterProps(last.sep)
+          if (start.length > 0) top.items.push({ start })
         }
       }
     }
