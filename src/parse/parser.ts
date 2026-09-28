@@ -42,6 +42,32 @@ function findNonEmptyIndex(list: SourceToken[]) {
   return -1
 }
 
+/**
+ * For a map item with an empty value, splice out any newline-separated
+ * tokens that are not indented past `indent`, as they belong after the pair.
+ *
+ * Note: Modifies input array
+ */
+function spliceEmptyValueEnd(sep: SourceToken[], indent: number) {
+  const nl: number[] = []
+  for (let i = 0; i < sep.length; ++i) {
+    const st = sep[i]
+    switch (st.type) {
+      case 'newline':
+        nl.push(i)
+        break
+      case 'space':
+        break
+      case 'comment':
+        if (st.indent > indent) nl.length = 0
+        break
+      default:
+        nl.length = 0
+    }
+  }
+  return nl.length >= 2 ? sep.splice(nl[1]) : []
+}
+
 function isFlowToken(
   token: Token | null | undefined
 ): token is FlowScalar | FlowCollection {
@@ -377,6 +403,21 @@ export class Parser {
       ) {
         const last = token.items[token.items.length - 1]
         if (
+          token.type === 'block-map' &&
+          last?.sep &&
+          !last.value &&
+          last.sep.some(st => st.type === 'anchor' || st.type === 'tag')
+        ) {
+          // A final pair with an empty but tagged or anchored value keeps its
+          // props, but following blank lines and comments belong to the parent.
+          const end = spliceEmptyValueEnd(last.sep, token.indent)
+          if (end.length > 0) {
+            if (top.type === 'document') top.end = end
+            else top.items.push({ start: end })
+            return
+          }
+        }
+        if (
           last &&
           !last.sep &&
           !last.value &&
@@ -555,26 +596,10 @@ export class Parser {
         this.type !== 'seq-item-ind'
 
       // For empty nodes, assign newline-separated not indented empty tokens to following node
-      let start: SourceToken[] = []
-      if (atNextItem && it.sep && !it.value) {
-        const nl: number[] = []
-        for (let i = 0; i < it.sep.length; ++i) {
-          const st = it.sep[i]
-          switch (st.type) {
-            case 'newline':
-              nl.push(i)
-              break
-            case 'space':
-              break
-            case 'comment':
-              if (st.indent > map.indent) nl.length = 0
-              break
-            default:
-              nl.length = 0
-          }
-        }
-        if (nl.length >= 2) start = it.sep.splice(nl[1])
-      }
+      const start =
+        atNextItem && it.sep && !it.value
+          ? spliceEmptyValueEnd(it.sep, map.indent)
+          : []
 
       switch (this.type) {
         case 'anchor':

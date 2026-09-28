@@ -798,6 +798,50 @@ describe('blank lines', () => {
     })
   })
 
+  describe('after empty value with props at end of map (#717)', () => {
+    for (const [name, props] of [
+      ['tag', '!!null'],
+      ['anchor', '&a']
+    ]) {
+      test(`${name} in seq`, () => {
+        const src = `- x: ${props}\n\n- y\n`
+        const doc = YAML.parseDocument(src)
+        expect(doc.errors).toHaveLength(0)
+        const seq = doc.value as YAML.YAMLSeq<YAML.Node>
+        expect(seq[1]).toMatchObject({ value: 'y', spaceBefore: true })
+        const map = seq[0] as YAML.YAMLMap<string, YAML.Scalar>
+        expect(map.get('x')).not.toHaveProperty('spaceBefore', true)
+        expect(String(doc)).toBe(`- x: ${props} \n\n- y\n`)
+      })
+
+      test(`${name} in nested map`, () => {
+        const src = `a:\n  x: ${props}\n\nb: 1\n`
+        const doc = YAML.parseDocument(src)
+        expect(doc.errors).toHaveLength(0)
+        expect(String(doc)).toBe(`a:\n  x: ${props} \n\nb: 1\n`)
+      })
+    }
+
+    test('with a following comment', () => {
+      const src = '- x: !!null\n\n# c\n- y\n'
+      const doc = YAML.parseDocument(src)
+      expect(doc.value).toMatchObject(
+        _seq(_map({ x: { value: null, tag: 'tag:yaml.org,2002:null' } }), {
+          value: 'y',
+          commentBefore: ' c',
+          spaceBefore: true
+        })
+      )
+      expect(String(doc)).toBe('- x: !!null \n\n# c\n- y\n')
+    })
+
+    test('at end of document', () => {
+      const doc = YAML.parseDocument('- x: !!null\n\n')
+      expect(doc.errors).toHaveLength(0)
+      expect(String(doc)).toBe('- x: !!null \n')
+    })
+  })
+
   describe('flow collections', () => {
     test('flow seq', () => {
       const src = '[1,\n\n2,\n3,\n\n4\n\n]'
