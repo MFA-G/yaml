@@ -835,6 +835,13 @@ describe('blank lines', () => {
       expect(String(doc)).toBe('- x: !!null \n\n# c\n- y\n')
     })
 
+    test('with a directly following comment', () => {
+      const src = '- x: !t\n  # c\n- y\n'
+      const doc = YAML.parseDocument(src)
+      expect(doc.errors).toHaveLength(0)
+      expect(String(doc)).toBe('- x: !t "" # c\n- y\n')
+    })
+
     test('at end of document', () => {
       const doc = YAML.parseDocument('- x: !!null\n\n')
       expect(doc.errors).toHaveLength(0)

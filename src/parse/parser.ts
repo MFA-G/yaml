@@ -46,9 +46,16 @@ function findNonEmptyIndex(list: SourceToken[]) {
  * For a map item with an empty value, splice out any newline-separated
  * tokens that are not indented past `indent`, as they belong after the pair.
  *
+ * With `fromBlankLine`, only split at a blank line, so that a comment
+ * directly after the value stays with it.
+ *
  * Note: Modifies input array
  */
-function spliceEmptyValueEnd(sep: SourceToken[], indent: number) {
+function spliceEmptyValueEnd(
+  sep: SourceToken[],
+  indent: number,
+  fromBlankLine = false
+) {
   const nl: number[] = []
   for (let i = 0; i < sep.length; ++i) {
     const st = sep[i]
@@ -65,7 +72,13 @@ function spliceEmptyValueEnd(sep: SourceToken[], indent: number) {
         nl.length = 0
     }
   }
-  return nl.length >= 2 ? sep.splice(nl[1]) : []
+  if (!fromBlankLine) return nl.length >= 2 ? sep.splice(nl[1]) : []
+  for (let j = 1; j < nl.length; ++j) {
+    let i = nl[j] - 1
+    while (sep[i]?.type === 'space') --i
+    if (sep[i]?.type === 'newline') return sep.splice(nl[j])
+  }
+  return []
 }
 
 function isFlowToken(
@@ -409,8 +422,9 @@ export class Parser {
           last.sep.some(st => st.type === 'anchor' || st.type === 'tag')
         ) {
           // A final pair with an empty but tagged or anchored value keeps its
-          // props, but following blank lines and comments belong to the parent.
-          const end = spliceEmptyValueEnd(last.sep, token.indent)
+          // props, but a following blank line and what comes after it belong
+          // to the parent.
+          const end = spliceEmptyValueEnd(last.sep, token.indent, true)
           if (end.length > 0) {
             if (top.type === 'document') top.end = end
             else top.items.push({ start: end })
